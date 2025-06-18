@@ -136,5 +136,5 @@ ARC - 命中率: 85.72% (25715 / 30000)
 
 Alina Ding  
 Email: yding384@gmail.com  
-LinkedIn: [https://www.linkedin.com/in/alinaying](https://www.linkedin.com/in/alinaying)
+LinkedIn: [https://www.linkedin.com/in/yidingalina/](https://www.linkedin.com/in/yidingalina/)
 
