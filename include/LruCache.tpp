@@ -1,29 +1,20 @@
 // ================================================================
-//  KLruCache.cpp  ——  LRU / LRU‑K / Hash‑LRU 的示例实现模板
-//  --------------------------------------------------------------
-//  说明：
-//  1. 这是与 include/KLruCache.h 配套的实现文件；
-//     每个函数都给出『最小可运行』逻辑 + 大段 TODO 注释，
-//     你可以在 TODO 区按提示继续完善或做性能优化。
-//  2. 为了让你一粘贴就能编译，本文件已包含头文件并
-//     明确在最底部做了模板实例化（典型做法）。
-//  3. 如果你想拆分成多个 .cpp，也没问题——只要保持
-//     模板实例化在某个编译单元即可。
+//  LruCache.cpp  ——  LRU / LRU‑K / Hash‑LRU 的示例实现
 // ================================================================
 
-#include "KLruCache.h"  // 记得路径根据你的 include 目录调整
+#include "LruCache.h"  // 记得路径根据你的 include 目录调整
 #include <stdexcept>     // std::runtime_error
 #include <thread>        // 获取硬件并发数（HashLRU 用）
 
 namespace Cache {
 
-// =============== KLruCache 具体实现 =============== //
+// =============== LruCache 具体实现 =============== //
 
 /**
  * ctor: 仅保存容量并创建 dummyHead / dummyTail
  */
 template<typename K, typename V>
-KLruCache<K,V>::KLruCache(int capacity) : capacity_(capacity)
+LruCache<K,V>::LruCache(int capacity) : capacity_(capacity)
 {
     if (capacity_ <= 0)
         throw std::invalid_argument("capacity must be > 0");
@@ -34,7 +25,7 @@ KLruCache<K,V>::KLruCache(int capacity) : capacity_(capacity)
 // 写入 / 更新：O(1)
 // ---------------------------------------------------------------
 template<typename K, typename V>
-void KLruCache<K,V>::put(const K& key, const V& value)
+void LruCache<K,V>::put(const K& key, const V& value)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = nodeMap_.find(key);
@@ -45,11 +36,11 @@ void KLruCache<K,V>::put(const K& key, const V& value)
     addNewNode(key, value);
 }
 
-// -- public: get (安全版) ----------------------------------------
+// -- public: get  ----------------------------------------
 // 若命中返回 true，并通过引用返回 value；否则 false
 // ---------------------------------------------------------------
 template<typename K, typename V>
-bool KLruCache<K,V>::get(const K& key, V& value)
+bool LruCache<K,V>::get(const K& key, V& value)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = nodeMap_.find(key);
@@ -59,11 +50,11 @@ bool KLruCache<K,V>::get(const K& key, V& value)
     return true;
 }
 
-// -- public: get (便捷版) ----------------------------------------
-// 若未命中，抛出异常；你可改成返回 optional
+// -- public: get  ----------------------------------------
+// 若未命中，抛出异常
 // ---------------------------------------------------------------
 template<typename K, typename V>
-V KLruCache<K,V>::get(const K& key)
+V LruCache<K,V>::get(const K& key)
 {
     V tmp{};
     if (!get(key, tmp))
@@ -73,7 +64,7 @@ V KLruCache<K,V>::get(const K& key)
 
 // -- public: remove ----------------------------------------------
 template<typename K, typename V>
-void KLruCache<K,V>::remove(const K& key)
+void LruCache<K,V>::remove(const K& key)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = nodeMap_.find(key);
@@ -86,7 +77,7 @@ void KLruCache<K,V>::remove(const K& key)
 
 /** 创建 dummyHead / dummyTail 并互链 */
 template<typename K, typename V>
-void KLruCache<K,V>::initializeList()
+void LruCache<K,V>::initializeList()
 {
     dummyHead_ = std::make_shared<Node>(K{}, V{});
     dummyTail_ = std::make_shared<Node>(K{}, V{});
@@ -95,14 +86,14 @@ void KLruCache<K,V>::initializeList()
 }
 
 template<typename K, typename V>
-void KLruCache<K,V>::updateExistingNode(NodePtr node, const V& value)
+void LruCache<K,V>::updateExistingNode(NodePtr node, const V& value)
 {
     node->setValue(value);
     moveToMostRecent(node);
 }
 
 template<typename K, typename V>
-void KLruCache<K,V>::addNewNode(const K& key, const V& value)
+void LruCache<K,V>::addNewNode(const K& key, const V& value)
 {
     if (static_cast<int>(nodeMap_.size()) >= capacity_)
         evictLeastRecent();
@@ -114,7 +105,7 @@ void KLruCache<K,V>::addNewNode(const K& key, const V& value)
 
 /** 把 node 移到链表尾（dummyTail_ 前）*/
 template<typename K, typename V>
-void KLruCache<K,V>::moveToMostRecent(NodePtr node)
+void LruCache<K,V>::moveToMostRecent(NodePtr node)
 {
     removeNode(node);
     insertNode(node);
@@ -122,7 +113,7 @@ void KLruCache<K,V>::moveToMostRecent(NodePtr node)
 
 /** 断开 node 与链表的链接 */
 template<typename K, typename V>
-void KLruCache<K,V>::removeNode(NodePtr node)
+void LruCache<K,V>::removeNode(NodePtr node)
 {
     auto prev = node->prev_.lock();
     auto next = node->next_;
@@ -134,7 +125,7 @@ void KLruCache<K,V>::removeNode(NodePtr node)
 
 /** 把 node 插入到尾部 */
 template<typename K, typename V>
-void KLruCache<K,V>::insertNode(NodePtr node)
+void LruCache<K,V>::insertNode(NodePtr node)
 {
     node->next_ = dummyTail_;
     node->prev_ = dummyTail_->prev_;
@@ -144,7 +135,7 @@ void KLruCache<K,V>::insertNode(NodePtr node)
 
 /** 删除链表头部真实节点（最久未使用） */
 template<typename K, typename V>
-void KLruCache<K,V>::evictLeastRecent()
+void LruCache<K,V>::evictLeastRecent()
 {
     NodePtr lru = dummyHead_->next_;
     if (lru == dummyTail_) return; // 不该发生
@@ -152,73 +143,109 @@ void KLruCache<K,V>::evictLeastRecent()
     nodeMap_.erase(lru->key_);
 }
 
-// ========= KLruKCache(示例简版实现) =============================
-// TODO：你可以逐步完善访问次数逻辑，这里给最简路径保持可编译
-// ================================================================
+// ========= LruKCache =============================
 
 template<typename K, typename V>
-KLruKCache<K,V>::KLruKCache(int cap,int histCap,int k)
-    : KLruCache<K,V>(cap), k_(k)
+LruKCache<K,V>::LruKCache(int capacity, int keyRange, int k)
+    : LruCache<K,V>(capacity), k_(k)
 {
-    historyList_ = std::make_unique<KLruCache<K,size_t>>(histCap);
+    (void)keyRange;
+    historyList_ = std::make_unique<LruCache<K, size_t>>(capacity);
 }
 
 template<typename K, typename V>
-void KLruKCache<K,V>::put(const K& key, const V& value)
-{
-    KLruCache<K,V>::put(key,value); // 先直接复用父类逻辑
-    // TODO: 记录历史计数并根据 k_ 决定是否真正写入
+bool LruKCache<K,V>::shouldPromote(const K& key, V& promotedValue) {
+    (void)promotedValue;
+    size_t historyCount = 0;
+    historyList_->get(key, historyCount);
+    historyCount++;
+    historyList_->put(key, historyCount);
+
+    if(historyCount >= k_){
+        // 这里用find更安全，map[key]会有默认值
+        auto it = historyValueMap_.find(key);
+        if (it != historyValueMap_.end()){
+            V storedValue = it -> second;
+            historyList_->remove(key);
+            historyValueMap_.erase(it);
+            return true;
+        }
+    }
+    return false;
 }
 
 template<typename K, typename V>
-V KLruKCache<K,V>::get(const K& key)
+void LruKCache<K, V>::put(const K& key, const V& value)
 {
-    return KLruCache<K,V>::get(key); // 简化实现
+    V existingValue{};
+    if (LruCache<K, V>::get(key, existingValue)) {
+        LruCache<K, V>::put(key, value);
+        return;
+    }
+
+    historyValueMap_[key] = value;
+
+    V promoteValue;
+    if (shouldPromote(key, promoteValue)) {
+        LruCache<K, V>::put(key, promoteValue);
+    }
 }
 
-// ========= KHashLruCaches(分片) =================================
-
 template<typename K, typename V>
-KHashLruCaches<K,V>::KHashLruCaches(size_t cap,int slice)
+V LruKCache<K, V>::get(const K& key)
+{
+    V value;
+    if (LruCache<K, V>::get(key, value)) return value;
+
+    if (shouldPromote(key, value)) {
+        LruCache<K, V>::put(key, value);
+        return value;
+    }
+
+    return V{};
+}
+
+// ========= HashLruCaches(分片) =================================
+
+// 构造函数
+template<typename K, typename V>
+HashLruCaches<K,V>::HashLruCaches(size_t cap, int slice)
     : capacity_(cap)
 {
-    sliceNum_ = slice > 0 ? slice : std::thread::hardware_concurrency();
-    size_t sliceCap = std::ceil(capacity_ / static_cast<double>(sliceNum_));
-    for(int i=0;i<sliceNum_;++i)
-        lruSlices_.emplace_back(std::make_unique<KLruCache<K,V>>(sliceCap));
+    sliceNum_ = slice > 0 ? slice : std::thread::hardware_concurrency(); // 默认按 CPU 核心数
+    size_t sliceCap = std::ceil(capacity_ / static_cast<double>(sliceNum_)); // 每个 slice 的容量
+
+    for (int i = 0; i < sliceNum_; ++i) {
+        lruSlices_.emplace_back(std::make_unique<LruCache<K, V>>(sliceCap));
+    }
 }
 
+// 哈希分片
 template<typename K, typename V>
-size_t KHashLruCaches<K,V>::calcSliceIndex(const K& key) const
-{
+size_t HashLruCaches<K,V>::calcSliceIndex(const K& key) const {
     return std::hash<K>{}(key) % sliceNum_;
 }
 
+// put/get 调用目标分片
 template<typename K, typename V>
-void KHashLruCaches<K,V>::put(const K& key,const V& value)
-{
-    lruSlices_[calcSliceIndex(key)]->put(key,value);
+void HashLruCaches<K,V>::put(const K& key, const V& value) {
+    lruSlices_[calcSliceIndex(key)]->put(key, value);
 }
 
 template<typename K, typename V>
-bool KHashLruCaches<K,V>::get(const K& key,V& value)
-{
-    return lruSlices_[calcSliceIndex(key)]->get(key,value);
+bool HashLruCaches<K,V>::get(const K& key, V& value) {
+    return lruSlices_[calcSliceIndex(key)]->get(key, value);
 }
 
 template<typename K, typename V>
-V KHashLruCaches<K,V>::get(const K& key)
-{
+V HashLruCaches<K,V>::get(const K& key) {
     return lruSlices_[calcSliceIndex(key)]->get(key);
 }
 
-// ================================================================
-// 显式模板实例化：把常用 <int,std::string> 组合提前编译，
-// 避免每个 .cpp 重复生成代码（可根据需要扩充）
-// ================================================================
 
-template class KLruCache<int,std::string>;
-template class KLruKCache<int,std::string>;
-template class KHashLruCaches<int,std::string>;
+// 显式模板实例化
+template class LruCache<int, std::string>;
+template class LruKCache<int, std::string>;
+template class HashLruCaches<int, std::string>;
 
 } // namespace Cache
