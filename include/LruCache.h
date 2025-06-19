@@ -4,7 +4,7 @@
 //  LRU 缓存（接口声明 + 详细注释版）
 //  ---------------------------------------------------------
 //  该头文件只声明类和成员函数原型，不包含实现代码；
-//  具体实现应放在 src/KLruCache.cpp 中。
+//  具体实现应放在 src/LruCache.cpp 中。
 // =========================================================
 
 #include <list>            // 双向链表（如果以后要改 list 实现，可保留）
@@ -19,11 +19,11 @@
 namespace Cache {
 
 // =========================================================
-// 1. 前向声明：让 LruNode 和 KLruCache 可以互相作为 friend
+// 1. 前向声明：让 LruNode 和 LruCache 可以互相作为 friend
 // =========================================================
 
 template<typename Key, typename Value>
-class KLruCache; // 注意：拼写必须和后面类名一致
+class LruCache; // 注意：拼写必须和后面类名一致
 
 // =========================================================
 // 2. LruNode：链表节点，持有一个键值对 + 链表指针
@@ -55,23 +55,23 @@ public:
     size_t getAccessCount() const { return accessCount_; }
     void   incrementAccessCount() { ++accessCount_; }
 
-    // 让 KLruCache 能访问本类私有成员
-    friend class KLruCache<Key, Value>;
+    // 让 LruCache 能访问本类私有成员
+    friend class LruCache<Key, Value>;
 };
 
 // =========================================================
-// 3. KLruCache：标准最近最少使用缓存（声明）
+// 3. LruCache：标准最近最少使用缓存（声明）
 // =========================================================
 
 template<typename Key, typename Value>
-class KLruCache : public CachePolicy<Key, Value> {
+class LruCache : public CachePolicy<Key, Value> {
 public:
     using Node      = LruNode<Key, Value>;
     using NodePtr   = std::shared_ptr<Node>;
     using NodeMap   = std::unordered_map<Key, NodePtr>;
 
-    explicit KLruCache(int capacity);
-    ~KLruCache() override = default;
+    explicit LruCache(int capacity);
+    ~LruCache() override = default;
 
     // ---- 接口函数（必须实现，见 .cpp）----
     void   put(const Key& key, const Value& value) override;          // 写入 / 更新
@@ -98,32 +98,35 @@ private:
 };
 
 // =========================================================
-// 4. KLruKCache：LRU-K 改良版缓存（只声明接口）
+// 4. LruKCache：LRU-K 改良版缓存（只声明接口）
 // =========================================================
 
 template<typename Key, typename Value>
-class KLruKCache : public KLruCache<Key, Value> {
+class LruKCache : public LruCache<Key, Value> {
 public:
-    KLruKCache(int capacity, int historyCapacity, int k);
+    LruKCache(int capacity, int historyCapacity, int k);
 
     // 重写 put / get，实现“K 次命中才进入主缓存”逻辑
     void  put(const Key& key, const Value& value);
     Value get(const Key& key);
 
 private:
+    bool shouldPromote(const Key&, Value&);
+
+private:
     int                                      k_;              // 进入主缓存所需的命中阈值
-    std::unique_ptr<KLruCache<Key, size_t>>  historyList_;    // 记录每个 key 的访问次数
+    std::unique_ptr<LruCache<Key, size_t>>  historyList_;    // 记录每个 key 的访问次数
     std::unordered_map<Key, Value>           historyValueMap_; // 保存 value，直到命中次数达到 k
 };
 
 // =========================================================
-// 5. KHashLruCaches：分片 LRU，提高并发性能（声明）
+// 5. HashLruCaches：分片 LRU，提高并发性能（声明）
 // =========================================================
 
 template<typename Key, typename Value>
-class KHashLruCaches {
+class HashLruCaches {
 public:
-    KHashLruCaches(size_t capacity, int sliceNum = 0);          // sliceNum=0 → 默认按 CPU 核心数
+    HashLruCaches(size_t capacity, int sliceNum = 0);          // sliceNum=0 → 默认按 CPU 核心数
 
     void  put(const Key& key, const Value& value);
     bool  get(const Key& key, Value& value);
@@ -133,9 +136,11 @@ private:
     size_t calcSliceIndex(const Key& key) const;                 // 计算 key 应进入哪个分片
 
 private:
-    size_t                                              capacity_;       // 总容量
-    int                                                 sliceNum_;       // 分片数
-    std::vector<std::unique_ptr<KLruCache<Key, Value>>> lruSlices_;      // 多个子缓存
+    size_t capacity_;       // 总容量
+    int sliceNum_;       // 分片数
+    std::vector<std::unique_ptr<LruCache<Key, Value>>> lruSlices_;      // 多个子缓存
 };
 
 } // namespace Cache
+
+#include "LruCache.tpp"
