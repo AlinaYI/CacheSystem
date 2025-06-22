@@ -129,6 +129,43 @@ test_LruOnly/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_LruOnly.dir/build.make CMakeFiles/test_LruOnly.dir/build
 .PHONY : test_LruOnly/fast
 
+#=============================================================================
+# Target rules for targets named test_LfuCache
+
+# Build rule for target.
+test_LfuCache: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_LfuCache
+.PHONY : test_LfuCache
+
+# fast build rule for target.
+test_LfuCache/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_LfuCache.dir/build.make CMakeFiles/test_LfuCache.dir/build
+.PHONY : test_LfuCache/fast
+
+test/test_LfuCache.o: test/test_LfuCache.cpp.o
+.PHONY : test/test_LfuCache.o
+
+# target to build an object file
+test/test_LfuCache.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_LfuCache.dir/build.make CMakeFiles/test_LfuCache.dir/test/test_LfuCache.cpp.o
+.PHONY : test/test_LfuCache.cpp.o
+
+test/test_LfuCache.i: test/test_LfuCache.cpp.i
+.PHONY : test/test_LfuCache.i
+
+# target to preprocess a source file
+test/test_LfuCache.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_LfuCache.dir/build.make CMakeFiles/test_LfuCache.dir/test/test_LfuCache.cpp.i
+.PHONY : test/test_LfuCache.cpp.i
+
+test/test_LfuCache.s: test/test_LfuCache.cpp.s
+.PHONY : test/test_LfuCache.s
+
+# target to generate assembly for a file
+test/test_LfuCache.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_LfuCache.dir/build.make CMakeFiles/test_LfuCache.dir/test/test_LfuCache.cpp.s
+.PHONY : test/test_LfuCache.cpp.s
+
 test/test_LruOnly.o: test/test_LruOnly.cpp.o
 .PHONY : test/test_LruOnly.o
 
@@ -161,7 +198,11 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
+	@echo "... test_LfuCache"
 	@echo "... test_LruOnly"
+	@echo "... test/test_LfuCache.o"
+	@echo "... test/test_LfuCache.i"
+	@echo "... test/test_LfuCache.s"
 	@echo "... test/test_LruOnly.o"
 	@echo "... test/test_LruOnly.i"
 	@echo "... test/test_LruOnly.s"

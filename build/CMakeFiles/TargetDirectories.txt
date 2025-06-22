@@ -1,3 +1,4 @@
 /home/alina/CacheSystem/build/CMakeFiles/test_LruOnly.dir
+/home/alina/CacheSystem/build/CMakeFiles/test_LfuCache.dir
 /home/alina/CacheSystem/build/CMakeFiles/edit_cache.dir
 /home/alina/CacheSystem/build/CMakeFiles/rebuild_cache.dir

@@ -16,8 +16,15 @@ add_executable(test_LruOnly
     ${SRC_FILES}
 )
 
+# 创建可执行文件（测试 LFU）
+add_executable(test_LfuCache
+    test/test_LfuCache.cpp
+    ${SRC_FILES}
+)
+
 # 开启编译优化和警告（建议）
 target_compile_options(test_LruOnly PRIVATE -Wall -Wextra -O2)
+target_compile_options(test_LfuCache PRIVATE -Wall -Wextra -O2)
 
 # 提示信息
 message(STATUS "✅ CMake configured: using template .tpp via header inclusion")
