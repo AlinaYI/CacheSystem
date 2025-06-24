@@ -1,8 +1,8 @@
 // ================================================================
-//  LruCache.cpp  ——  LRU / LRU‑K / Hash‑LRU 的示例实现
+//  LruCache.cpp  ——  LRU / LRU‑K / Hash‑LRU 的实现
 // ================================================================
 
-#include "LruCache.h"  // 记得路径根据你的 include 目录调整
+#include "LruCache.h"
 #include <stdexcept>     // std::runtime_error
 #include <thread>        // 获取硬件并发数（HashLRU 用）
 
