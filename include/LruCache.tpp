@@ -161,7 +161,7 @@ bool LruKCache<K,V>::shouldPromote(const K& key, V& promotedValue) {
     historyCount++;
     historyList_->put(key, historyCount);
 
-    if(historyCount >= k_){
+    if(historyCount >= static_cast<size_t>(k_)){
         // 这里用find更安全，map[key]会有默认值
         auto it = historyValueMap_.find(key);
         if (it != historyValueMap_.end()){
@@ -243,7 +243,6 @@ V HashLruCaches<K,V>::get(const K& key) {
 }
 
 
-// 显式模板实例化
 template class LruCache<int, std::string>;
 template class LruKCache<int, std::string>;
 template class HashLruCaches<int, std::string>;
