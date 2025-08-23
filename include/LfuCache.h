@@ -11,7 +11,8 @@
 namespace Cache {
 
 // =========================================================
-// FreqList: 双向链表结构，用于按频率组织 LFU 缓存节点
+// FreqList: Doubly linked list structure used to organize
+// LFU cache nodes by frequency
 // =========================================================
 
 template<typename Key, typename Value>
@@ -68,14 +69,14 @@ public:
         return head_->next_;
     }
 
-    // 把本链表的“真实节点”全部取出，并清空本链表
+    // Extract all “real nodes” from this list and clear it
     void extractAll(std::vector<NodePtr>& out) {
         auto cur = head_->next_;
         while (cur && cur != tail_) {
             out.push_back(cur);
             cur = cur->next_;
         }
-        // 清空链表（保留哨兵）
+        // Clear the list (keep sentinels)
         head_->next_ = tail_;
         tail_->prev_ = head_;
     }
@@ -90,9 +91,9 @@ private:
 
 
 // =========================================================
-/* LFU Cache 类定义（带 Aging）
- * 触发条件：curAverageNum_ > maxAverageNum_
- * 衰减策略：所有节点 freq = max(1, freq / 2)
+/* LFU Cache class definition (with Aging)
+ * Trigger condition: curAverageNum_ > maxAverageNum_
+ * Aging policy: for all nodes, freq = max(1, freq / 2)
  */
 // =========================================================
 
@@ -101,7 +102,7 @@ class LfuCache : public CachePolicy<Key, Value> {
 public:
     using NodePtr = typename FreqList<Key, Value>::NodePtr;
 
-    // capacity: 容量；maxAvg: 触发 Aging 的平均频次阈值
+    // capacity: cache size; maxAvg: average-frequency threshold that triggers Aging
     LfuCache(int capacity, int maxAvg = 1000000)
         : capacity_(capacity),
           maxAverageNum_(maxAvg),
@@ -112,7 +113,7 @@ public:
     void put(const Key& key, const Value& value) override;
     bool get(const Key& key, Value& value) override;
 
-    // 方便使用者的便捷版（未命中返回 Value()）
+    // Convenience version for users (returns Value() on miss)
     Value get(const Key& key) override {
         Value v{};
         return get(key, v) ? v : Value{};
@@ -130,11 +131,11 @@ public:
 private:
     void increaseFrequency(NodePtr node);
     void evict();
-    void updateMinFreq(); // 可选：当前实现未显式使用，但保留声明便于扩展
+    void updateMinFreq(); // Optional: not explicitly used in the current implementation, kept for extensibility
 
-    // Aging 相关
-    void maybeAge();  // 判断是否需要触发衰减
-    void ageAll();    // 执行一次全量衰减
+    // Aging-related
+    void maybeAge();  // Determine whether to trigger aging
+    void ageAll();    // Perform a full aging pass
 
 private:
     int capacity_;
@@ -150,4 +151,4 @@ private:
 
 } // namespace Cache
 
-#include "LfuCache.tpp"
+#include "../src/LfuCache.tpp"

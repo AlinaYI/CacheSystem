@@ -1,10 +1,11 @@
 #pragma once
 #include <algorithm>
+#include "../include/LfuCache.h"
 
 namespace Cache {
 
-// 插入或更新 key
-// 如果已存在，则更新 value 和频率；否则插入新节点，并可能驱逐
+// Insert or update key
+// If it exists, update value and frequency; otherwise insert a new node and possibly evict
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::put(const Key& key, const Value& value) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -29,14 +30,14 @@ void LfuCache<Key, Value>::put(const Key& key, const Value& value) {
     freqMap_[1]->addNode(node);
     minFreq_ = 1;
 
-    // 维护全局统计
-    curTotalNum_ += 1; // 初始 freq=1
+    // Maintain global statistics
+    curTotalNum_ += 1; // Initial freq=1
     curAverageNum_ = nodeMap_.empty() ? 0 : (curTotalNum_ / static_cast<int>(nodeMap_.size()));
 
     maybeAge();
 }
 
-// 获取 key 对应的 value，如果存在则返回 true 且提升频率，否则 false
+// Get value corresponding to key, return true and increase frequency if it exists, otherwise false
 template<typename Key, typename Value>
 bool LfuCache<Key, Value>::get(const Key& key, Value& value) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -49,7 +50,7 @@ bool LfuCache<Key, Value>::get(const Key& key, Value& value) {
     return true;
 }
 
-// 将节点提升到 freq+1 的链表中
+// Move node to freq+1 list
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::increaseFrequency(NodePtr node) {
     const int oldFreq = node->freq;
@@ -73,23 +74,23 @@ void LfuCache<Key, Value>::increaseFrequency(NodePtr node) {
     }
     freqMap_[newFreq]->addNode(node);
 
-    // 更新全局统计（总频次 +1；平均值重算）
+    // Update global statistics (total frequency +1; recompute average)
     curTotalNum_ += 1;
     curAverageNum_ = nodeMap_.empty() ? 0 : (curTotalNum_ / static_cast<int>(nodeMap_.size()));
 }
 
-// 淘汰当前最小频率的链表中的最旧节点（链表头部）
+// Evict the oldest node in the list with the current minimum frequency (list head)
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::evict() {
     if (nodeMap_.empty()) return;
     if (freqMap_.count(minFreq_) == 0 || !freqMap_[minFreq_]) {
-        // 保险起见，寻找当前存在的最小频率
+        // For safety, find the current minimum frequency
         updateMinFreq();
         if (freqMap_.count(minFreq_) == 0 || !freqMap_[minFreq_]) return;
     }
 
     auto node = freqMap_[minFreq_]->getFirstNode();
-    if (!node || node->next_ == nullptr) return; // 空或仅哨兵，容错
+    if (!node || node->next_ == nullptr) return; // Empty or only sentinel, for safety
 
     const int removedFreq = node->freq;
 
@@ -101,7 +102,7 @@ void LfuCache<Key, Value>::evict() {
 
     nodeMap_.erase(node->key);
 
-    // 减掉该节点贡献的频次
+    // Subtract the frequency contributed by this node
     curTotalNum_ -= removedFreq;
     curTotalNum_ = std::max(0, curTotalNum_);
     curAverageNum_ = nodeMap_.empty() ? 0 : (curTotalNum_ / static_cast<int>(nodeMap_.size()));
@@ -109,7 +110,7 @@ void LfuCache<Key, Value>::evict() {
 
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::updateMinFreq() {
-    // 简单地线性找一个最小存在的频率；Aging 后通常会回到 1
+    // Simply find the minimum frequency that exists; after Aging, it usually returns to 1
     if (freqMap_.empty()) {
         minFreq_ = 1;
         return;
@@ -121,14 +122,14 @@ void LfuCache<Key, Value>::updateMinFreq() {
         }
     }
     if (candidate == std::numeric_limits<int>::max()) {
-        // 没有有效桶
+        // No valid bucket
         minFreq_ = 1;
     } else {
         minFreq_ = candidate;
     }
 }
 
-// ===================== Aging 实现 =====================
+// ===================== Aging implementation =====================
 
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::maybeAge() {
@@ -139,8 +140,8 @@ void LfuCache<Key, Value>::maybeAge() {
 
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::ageAll() {
-    // 把所有节点的频次统一“减半”，最低为 1
-    // 1) 取出全部节点
+    // Halve the frequency of all nodes, minimum is 1
+    // 1) Extract all nodes
     std::vector<NodePtr> all;
     all.reserve(nodeMap_.size());
 
@@ -151,11 +152,11 @@ void LfuCache<Key, Value>::ageAll() {
     }
     freqMap_.clear();
 
-    // 2) 重新分桶 & 重新统计总频次
+    // 2) Re-bucket & re-count total frequency
     long long newTotal = 0;
     for (auto& node : all) {
         const int oldFreq = node->freq;
-        int newFreq = (oldFreq > 1) ? (oldFreq / 2) : 1; // 减半衰减；如需“减一”可改：std::max(1, oldFreq - 1)
+        int newFreq = (oldFreq > 1) ? (oldFreq / 2) : 1; // Half-decay; if "subtract 1" is needed: std::max(1, oldFreq - 1)
         if (newFreq < 1) newFreq = 1;
         node->freq = newFreq;
 
@@ -166,8 +167,8 @@ void LfuCache<Key, Value>::ageAll() {
         newTotal += newFreq;
     }
 
-    // 3) 重新计算 minFreq_ / curTotalNum_ / curAverageNum_
-    minFreq_ = 1;  // 衰减后最小频次回到 1
+    // 3) Re-compute minFreq_ / curTotalNum_ / curAverageNum_
+    minFreq_ = 1;  // After decay, the minimum frequency returns to 1
     curTotalNum_ = static_cast<int>(newTotal);
     curAverageNum_ = nodeMap_.empty() ? 0 : (curTotalNum_ / static_cast<int>(nodeMap_.size()));
 }

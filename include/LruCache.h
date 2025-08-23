@@ -1,53 +1,53 @@
 #pragma once
 
 // =========================================================
-//  LRU 缓存（接口声明 + 详细注释版）
+//  LRU cache (interface declarations + richly commented)
 //  ---------------------------------------------------------
-//  头文件只声明类和成员函数原型
-//  具体实现应放在 src/LruCache.cpp 中。
+//  The header only declares classes and member function prototypes.
+//  Concrete implementations should live in src/LruCache.cpp.
 // =========================================================
 
-#include <list>            // 双向链表（如果以后要改 list 实现，可保留）
-#include <memory>          // 智能指针 shared_ptr / weak_ptr
-#include <mutex>           // std::mutex 上锁保证线程安全
-#include <unordered_map>   // 哈希表：O(1) 查找 key 所在的节点
-#include <vector>          // 分片 LRU 需要用到
-#include <cmath>           // std::ceil 在 Hash 分片中用
+#include <list>            // Doubly linked list (can be swapped for another list impl later if needed)
+#include <memory>          // Smart pointers: shared_ptr / weak_ptr
+#include <mutex>           // std::mutex for thread safety
+#include <unordered_map>   // Hash table: O(1) lookup to find the node for a key
+#include <vector>          // Used by sharded (Hash) LRU
+#include <cmath>           // std::ceil used in hash sharding
 
-#include "CachePolicy.h" // 通用缓存策略接口（定义 put / get）
+#include "CachePolicy.h"   // Common cache policy interface (defines put / get)
 
 namespace Cache {
 
 // =========================================================
-// 1. 前向声明：让 LruNode 和 LruCache 可以互相作为 friend
+// 1. Forward declaration: let LruNode and LruCache be friends
 // =========================================================
 
 template<typename Key, typename Value>
 class LruCache;
 
 // =========================================================
-// 2. LruNode：链表节点，持有一个键值对 + 链表指针
+// 2. LruNode: list node holding a key/value pair + list links
 // =========================================================
 
 template<typename Key, typename Value>
 class LruNode {
 private:
-    Key   key_;              // 缓存 key
-    Value value_;            // 缓存 value
-    size_t accessCount_{};   // 访问计数，可供扩展
+    Key   key_;              // Cache key
+    Value value_;            // Cache value
+    size_t accessCount_{};   // Access counter, available for extensions
 
-    // **指针说明**
-    // next_  : shared_ptr  → 拥有后继节点的所有权
-    // prev_  : weak_ptr    → 观察前驱节点（不增加引用计数，避免循环引用）
+    // **Pointer notes**
+    // next_ : shared_ptr  → owns the successor node
+    // prev_ : weak_ptr    → observes the predecessor (no refcount increase; avoids cycles)
     std::weak_ptr<LruNode<Key, Value>> prev_;
     std::shared_ptr<LruNode<Key, Value>> next_;
 
 public:
-    // ----- 构造函数 -----
+    // ----- Constructors -----
     LruNode(const Key& key, const Value& value)
         : key_(key), value_(value), accessCount_(1) {}
 
-    // ----- 基本 Getter / Setter -----
+    // ----- Basic getters / setters -----
     const Key&   getKey()   const { return key_; }
     const Value& getValue() const { return value_; }
     void setValue(const Value& value) { value_ = value; }
@@ -55,12 +55,12 @@ public:
     size_t getAccessCount() const { return accessCount_; }
     void   incrementAccessCount() { ++accessCount_; }
 
-    // 让 LruCache 能访问本类私有成员
+    // Allow LruCache to access private members
     friend class LruCache<Key, Value>;
 };
 
 // =========================================================
-// 3. LruCache：标准最近最少使用缓存（声明）
+// 3. LruCache: standard least-recently-used cache (declaration)
 // =========================================================
 
 template<typename Key, typename Value>
@@ -73,32 +73,32 @@ public:
     explicit LruCache(int capacity);
     ~LruCache() override = default;
 
-    // ---- 接口函数（必须实现，见 .cpp）----
-    void   put(const Key& key, const Value& value) override;          // 写入 / 更新
-    bool   get(const Key& key, Value& value) override;               // 读取（安全版）
-    Value  get(const Key& key) override;                             // 读取（便捷版）
-    void   remove(const Key& key);                                   // 删除 key
+    // ---- Interface functions (must be implemented, see .cpp) ----
+    void   put(const Key& key, const Value& value) override;   // Write / update
+    bool   get(const Key& key, Value& value) override;         // Read (safe version)
+    Value  get(const Key& key) override;                       // Read (convenience version)
+    void   remove(const Key& key);                             // Erase a key
 
 private:
-    // ---- 内部辅助函数 ----
-    void initializeList();                                           // 创建 dummyHead / dummyTail
-    void updateExistingNode(NodePtr node, const Value& value);       // 命中更新
-    void addNewNode(const Key& key, const Value& value);             // 不存在时添加
-    void moveToMostRecent(NodePtr node);                             // 移到链表尾
-    void removeNode(NodePtr node);                                   // 从链表中移除
-    void insertNode(NodePtr node);                                   // 插入链表尾
-    void evictLeastRecent();                                         // 超容量驱逐
+    // ---- Internal helpers ----
+    void initializeList();                                     // Create dummyHead / dummyTail
+    void updateExistingNode(NodePtr node, const Value& value); // Update on hit
+    void addNewNode(const Key& key, const Value& value);       // Add when not present
+    void moveToMostRecent(NodePtr node);                       // Move to list tail
+    void removeNode(NodePtr node);                             // Remove from list
+    void insertNode(NodePtr node);                             // Insert at list tail
+    void evictLeastRecent();                                   // Evict when over capacity
 
 private:
-    int       capacity_{};   // 缓存容量
+    int       capacity_{};   // Cache capacity
     NodeMap   nodeMap_;      // key → NodePtr
-    std::mutex mutex_;       // 全局锁（简单线程安全实现）
-    NodePtr   dummyHead_;    // 虚拟头节点
-    NodePtr   dummyTail_;    // 虚拟尾节点
+    std::mutex mutex_;       // Global lock (simple thread-safety approach)
+    NodePtr   dummyHead_;    // Sentinel head node
+    NodePtr   dummyTail_;    // Sentinel tail node
 };
 
 // =========================================================
-// 4. LruKCache：LRU-K 改良版缓存（只声明接口）
+// 4. LruKCache: LRU-K improved cache (interface only)
 // =========================================================
 
 template<typename Key, typename Value>
@@ -106,7 +106,7 @@ class LruKCache : public LruCache<Key, Value> {
 public:
     LruKCache(int capacity, int historyCapacity, int k);
 
-    // 重写 put / get，实现“K 次命中才进入主缓存”逻辑
+    // Override put / get to implement the “admit after K hits” logic
     void  put(const Key& key, const Value& value);
     Value get(const Key& key);
 
@@ -114,33 +114,33 @@ private:
     bool shouldPromote(const Key&, Value&);
 
 private:
-    int                                      k_;              // 进入主缓存所需的命中阈值
-    std::unique_ptr<LruCache<Key, size_t>>  historyList_;    // 记录每个 key 的访问次数
-    std::unordered_map<Key, Value>           historyValueMap_; // 保存 value，直到命中次数达到 k
+    int                                      k_;               // Hit threshold to enter the main cache
+    std::unique_ptr<LruCache<Key, size_t>>   historyList_;     // Tracks per-key access counts
+    std::unordered_map<Key, Value>           historyValueMap_; // Holds values until hits reach k
 };
 
 // =========================================================
-// 5. HashLruCaches：分片 LRU，提高并发性能（声明）
+// 5. HashLruCaches: sharded LRU to improve concurrency (declaration)
 // =========================================================
 
 template<typename Key, typename Value>
 class HashLruCaches {
 public:
-    HashLruCaches(size_t capacity, int sliceNum = 0);          // sliceNum=0 → 默认按 CPU 核心数
+    HashLruCaches(size_t capacity, int sliceNum = 0);          // sliceNum=0 → default to CPU core count
 
     void  put(const Key& key, const Value& value);
     bool  get(const Key& key, Value& value);
     Value get(const Key& key);
 
 private:
-    size_t calcSliceIndex(const Key& key) const;                 // 计算 key 应进入哪个分片
+    size_t calcSliceIndex(const Key& key) const;                // Compute which shard a key belongs to
 
 private:
-    size_t capacity_;       // 总容量
-    int sliceNum_;       // 分片数
-    std::vector<std::unique_ptr<LruCache<Key, Value>>> lruSlices_;      // 多个子缓存
+    size_t capacity_;       // Total capacity
+    int    sliceNum_;       // Number of shards
+    std::vector<std::unique_ptr<LruCache<Key, Value>>> lruSlices_; // Multiple sub-caches
 };
 
 } // namespace Cache
 
-#include "LruCache.tpp"
+#include "../src/LruCache.tpp"

@@ -1,17 +1,17 @@
 // ================================================================
-//  LruCache.cpp  ——  LRU / LRU‑K / Hash‑LRU 的实现
+//  LruCache.cpp  ——  LRU / LRU‑K / Hash‑LRU implementation
 // ================================================================
 
-#include "LruCache.h"
+#include "../include/LruCache.h"
 #include <stdexcept>     // std::runtime_error
-#include <thread>        // 获取硬件并发数（HashLRU 用）
+#include <thread>        // Get hardware concurrency (HashLRU uses)
 
 namespace Cache {
 
-// =============== LruCache 具体实现 =============== //
+// =============== LruCache implementation =============== //
 
 /**
- * ctor: 仅保存容量并创建 dummyHead / dummyTail
+ * ctor: only save capacity and create dummyHead / dummyTail
  */
 template<typename K, typename V>
 LruCache<K,V>::LruCache(int capacity) : capacity_(capacity)
@@ -22,7 +22,7 @@ LruCache<K,V>::LruCache(int capacity) : capacity_(capacity)
 }
 
 // -- public: put --------------------------------------------------
-// 写入 / 更新：O(1)
+// Write / update: O(1)
 // ---------------------------------------------------------------
 template<typename K, typename V>
 void LruCache<K,V>::put(const K& key, const V& value)
@@ -37,7 +37,7 @@ void LruCache<K,V>::put(const K& key, const V& value)
 }
 
 // -- public: get  ----------------------------------------
-// 若命中返回 true，并通过引用返回 value；否则 false
+// If hit, return true and return value by reference; otherwise false
 // ---------------------------------------------------------------
 template<typename K, typename V>
 bool LruCache<K,V>::get(const K& key, V& value)
@@ -51,7 +51,7 @@ bool LruCache<K,V>::get(const K& key, V& value)
 }
 
 // -- public: get  ----------------------------------------
-// 若未命中，抛出异常
+// If not hit, throw an exception
 // ---------------------------------------------------------------
 template<typename K, typename V>
 V LruCache<K,V>::get(const K& key)
@@ -75,7 +75,7 @@ void LruCache<K,V>::remove(const K& key)
 
 // -- private helpers ---------------------------------------------
 
-/** 创建 dummyHead / dummyTail 并互链 */
+/** Create dummyHead / dummyTail and link them */
 template<typename K, typename V>
 void LruCache<K,V>::initializeList()
 {
@@ -103,7 +103,7 @@ void LruCache<K,V>::addNewNode(const K& key, const V& value)
     nodeMap_[key] = n;
 }
 
-/** 把 node 移到链表尾（dummyTail_ 前）*/
+/** Move node to the list tail (before dummyTail_) */
 template<typename K, typename V>
 void LruCache<K,V>::moveToMostRecent(NodePtr node)
 {
@@ -111,7 +111,7 @@ void LruCache<K,V>::moveToMostRecent(NodePtr node)
     insertNode(node);
 }
 
-/** 断开 node 与链表的链接 */
+/** Disconnect node from the list */
 template<typename K, typename V>
 void LruCache<K,V>::removeNode(NodePtr node)
 {
@@ -123,7 +123,7 @@ void LruCache<K,V>::removeNode(NodePtr node)
     }
 }
 
-/** 把 node 插入到尾部 */
+/** Insert node at the tail */
 template<typename K, typename V>
 void LruCache<K,V>::insertNode(NodePtr node)
 {
@@ -133,12 +133,12 @@ void LruCache<K,V>::insertNode(NodePtr node)
     dummyTail_->prev_ = node;
 }
 
-/** 删除链表头部真实节点（最久未使用） */
+/** Delete the real node at the head of the list (least recently used) */
 template<typename K, typename V>
 void LruCache<K,V>::evictLeastRecent()
 {
     NodePtr lru = dummyHead_->next_;
-    if (lru == dummyTail_) return; // 不该发生
+    if (lru == dummyTail_) return; // Shouldn't happen
     removeNode(lru);
     nodeMap_.erase(lru->key_);
 }
@@ -162,7 +162,7 @@ bool LruKCache<K,V>::shouldPromote(const K& key, V& promotedValue) {
     historyList_->put(key, historyCount);
 
     if(historyCount >= static_cast<size_t>(k_)){
-        // 这里用find更安全，map[key]会有默认值
+        // Use find for safety, map[key] has a default value
         auto it = historyValueMap_.find(key);
         if (it != historyValueMap_.end()){
             V storedValue = it -> second;
@@ -212,21 +212,21 @@ template<typename K, typename V>
 HashLruCaches<K,V>::HashLruCaches(size_t cap, int slice)
     : capacity_(cap)
 {
-    sliceNum_ = slice > 0 ? slice : std::thread::hardware_concurrency(); // 默认按 CPU 核心数
-    size_t sliceCap = std::ceil(capacity_ / static_cast<double>(sliceNum_)); // 每个 slice 的容量
+    sliceNum_ = slice > 0 ? slice : std::thread::hardware_concurrency(); // Default by CPU cores
+    size_t sliceCap = std::ceil(capacity_ / static_cast<double>(sliceNum_)); // Capacity of each slice
 
     for (int i = 0; i < sliceNum_; ++i) {
         lruSlices_.emplace_back(std::make_unique<LruCache<K, V>>(sliceCap));
     }
 }
 
-// 哈希分片
+// Hash slices
 template<typename K, typename V>
 size_t HashLruCaches<K,V>::calcSliceIndex(const K& key) const {
     return std::hash<K>{}(key) % sliceNum_;
 }
 
-// put/get 调用目标分片
+// put/get call the target slice
 template<typename K, typename V>
 void HashLruCaches<K,V>::put(const K& key, const V& value) {
     lruSlices_[calcSliceIndex(key)]->put(key, value);

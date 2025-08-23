@@ -1,31 +1,32 @@
-# ARC (Adaptive Replacement Cache) 缓存策略
+# ARC (Adaptive Replacement Cache) Strategy
 
-## ARC 是一种自适应地平衡最近使用和最不经常使用策略的缓存算法
+**ARC is a cache algorithm that adaptively balances recency and frequency**
 
-ARC（Adaptive Replacement Cache）是一种结合了 LRU（最近最少使用）和 LFU（最不经常使用）优点的缓存替换算法。它通过自适应地调整策略，在不同访问模式下都能提供良好的缓存命中率，旨在解决 LRU 和 LFU 在特定工作负载下的局限性。
+ARC (Adaptive Replacement Cache) is a cache replacement algorithm that combines the strengths of LRU (Least Recently Used) and LFU (Least Frequently Used). By adapting its strategy, ARC delivers good hit rates across different access patterns and aims to overcome the limitations of LRU and LFU under specific workloads.
 
-### 适用场景
-- 访问模式多变，混合了热点数据、顺序扫描和突发性访问的复杂工作负载。
-- 需要兼顾数据的时间局部性（最近访问）和频率局部性（频繁访问）的场景。
-- 期望在多种工作负载下都能保持较高命中率的应用。
+### Applicable Scenarios
 
-### 设计思路
-ARC 算法通过维护四个列表和一个动态参数 `p` 来管理缓存项：
+- Workloads with varying access patterns, mixing hot data, sequential scans, and bursty accesses.
+- Scenarios that need to consider both temporal locality (recent access) and frequency locality (frequent access).
+- Applications that aim to maintain high hit rates across a wide range of workloads.
 
--   **T1 (Temporal List 1):** 存储仅被访问过 **一次** 的缓存项。它类似于一个 LRU 列表，用于捕获短期热点。
--   **B1 (Ghost List 1):** 记录曾经在 T1 中但已被驱逐的缓存项的键。这是一个“幽灵列表”，用于判断是否应该增加 T2 的容量（即减少 T1 的容量）。
--   **T2 (Temporal List 2):** 存储被访问过 **多次** 的缓存项。它也类似于一个 LRU 列表，用于捕获长期热点。
--   **B2 (Ghost List 2):** 记录曾经在 T2 中但已被驱逐的缓存项的键。同样是“幽灵列表”，用于判断是否应该增加 T1 的容量（即减少 T2 的容量）。
+### Design Approach
 
-**动态参数 `p`:**
-`p` 是一个在 `0` 到 `capacity_` 之间动态调整的参数，它表示 T1 的目标大小。`p` 的调整决定了 ARC 算法是更倾向于 LRU 行为（增大 T1）还是 LFU 行为（增大 T2）。
+ARC manages cache entries by maintaining four lists and a dynamic parameter `p`:
 
-### 顶层接口： `CachePolicy.h`
-这个项目是想写所有的缓存策略的合集，那么这里就设计了一个顶层的接口
-用于实现所有的缓存算法的
-这个接口就包括定义了pure virtual function
+- **T1 (Temporal List 1):** Stores items that have been accessed **once**. This behaves like an LRU list to capture short-term hot items.
+- **B1 (Ghost List 1):** Records keys that used to be in T1 but have been evicted. This “ghost list” helps decide whether to increase T2’s capacity (i.e., decrease T1’s capacity).
+- **T2 (Temporal List 2):** Stores items that have been accessed **multiple** times. This also behaves like an LRU list to capture long-term hot items.
+- **B2 (Ghost List 2):** Records keys that used to be in T2 but have been evicted. Similarly, this ghost list helps decide whether to increase T1’s capacity (i.e., decrease T2’s capacity).
 
-```cpp
+**Dynamic parameter `p`:**
+ `p` is dynamically adjusted within `0` to `capacity_`, representing the target size of T1. The adjustment of `p` decides whether ARC leans more toward LRU behavior (increase T1) or LFU-like behavior (increase T2).
+
+### Top-Level Interface: `CachePolicy.h`
+
+This project aims to implement a collection of cache strategies, so a top-level interface is designed for implementing various cache algorithms. This interface defines the following pure virtual functions:
+
+```
 template<typename Key, typename Value>
 class CachePolicy {
 public:
@@ -35,123 +36,133 @@ public:
 };
 ```
 
-### ARC 接口和实现
+### ARC Interface and Implementation
 
-**头文件设计：**
-- 声明了 `ArcCache` 类：继承 `CachePolicy` 接口，实现 ARC 逻辑。
-- 内部数据结构包括：`t1_`, `b1_`, `t2_`, `b2_` (使用 `std::list` 实现双向链表），以及 `cache_map_` (`std::unordered_map`) 用于快速查找。
-- `CacheEntry` 结构体：存储值、对应链表中的迭代器和链表类型 (`ListType`)。
-- `b1_map_` 和 `b2_map_`：辅助 `b1_` 和 `b2_` 进行 O(1) 查找，存储 Key 到其在幽灵列表中迭代器的映射。
+**Header design:**
 
-**实现文件特点：**
-- `put(const Key& key, const Value& value)`：处理缓存命中、幽灵命中 (B1 或 B2) 和新项插入，并根据 ARC 策略调整 `p` 值和执行替换。
-- `get(const Key& key, Value& value)`：处理缓存命中，将命中的项移到 T2。
-- `replace(bool hit_in_b1)`：核心替换逻辑，根据 `p` 值和 `hit_in_b1` 的状态决定从 T1 或 T2 驱逐项，并将其移入相应的幽灵列表。
-- `moveToT2(const Key& key)`：将一个 Key 从 T1 或 T2 移动到 T2 的 MRU 端。
-- `evictFromList(std::list<Key>& list, ListType type)`：从指定列表中驱逐 LRU 项，并将其键添加到相应的幽灵列表和 `map` 中。
-- 为确保多线程安全性，在 put/get/remove 操作中加入 mutex，确保数据安全性和一致性。
+- Declares the `ArcCache` class, which inherits from `CachePolicy` and implements ARC logic.
+- Internal data structures include `t1_`, `b1_`, `t2_`, `b2_` (implemented as `std::list` doubly linked lists), and `cache_map_` (`std::unordered_map`) for fast lookup.
+- `CacheEntry` struct: stores the value, the iterator in the corresponding list, and the list type (`ListType`).
+- `b1_map_` and `b2_map_`: assist `b1_` and `b2_` with O(1) lookups by mapping keys to their iterators in the ghost lists.
 
-## 测试设计
+**Implementation highlights:**
 
-### 测试目标
-- 验证 ARC 的基本功能：put、get、clear、size、capacity。
-- 测试 ARC 在不同访问模式下（热点、循环、工作负载变化）的自适应能力和命中率表现。
-- 验证 ARC 算法中 `p` 参数的动态调整是否符合预期。
-- 测试幽灵列表 (B1, B2) 的命中情况及其对缓存行为的影响。
+- `put(const Key& key, const Value& value)`: handles cache hits, ghost hits (B1 or B2), and new insertions; adjusts `p` and performs replacement according to ARC.
+- `get(const Key& key, Value& value)`: handles cache hits and moves the hit item to T2.
+- `replace(bool hit_in_b1)`: core replacement logic; based on `p` and whether the hit was in B1, decides to evict from T1 or T2 and insert into the corresponding ghost list.
+- `moveToT2(const Key& key)`: moves a key from T1 or T2 to the MRU end of T2.
+- `evictFromList(std::list<Key>& list, ListType type)`: evicts the LRU item from the specified list and adds its key to the corresponding ghost list and map.
+- To ensure thread safety, `mutex` is used in put/get/remove operations to guarantee data safety and consistency.
 
-### 测试场景
+## Test Design
 
-#### 1. 热点访问场景 (Hot Access)
-**目的：** 模拟大部分访问集中在少数 key 上，观察 ARC 如何利用其双路径（T1/T2）特性来优化热点数据的保留。
+### Test Objectives
 
-| 测试   | 参数            | 说明           | 预期结果             |
-|--------|-----------------|----------------|----------------------|
-| Test 1 | CAP=20, HOT=20  | 基线测试        | 命中率高于 LRU 和 LFU |
-| Test 2 | CAP=40          | 增大缓存容量    | 命中率显著提升，保持高位 |
-| Test 3 | HOT=10          | 热点更集中      | 命中率进一步上升，稳定在高点 |
+- Verify ARC’s basic functionality: `put`, `get`, `clear`, `size`, `capacity`.
+- Evaluate ARC’s adaptivity and hit-rate performance under different access patterns (hot set, loops, workload shifts).
+- Verify that the dynamic adjustment of the `p` parameter matches expectations.
+- Test ghost-list hits (B1, B2) and their impact on cache behavior.
 
-#### 2. 循环扫描场景 (Loop Scan)
-**目的：** 模拟数据循环访问场景，通常对 LRU 和 LFU 不利。观察 ARC 如何处理这种模式，通过 B1/B2 避免频繁驱逐。
+### Test Scenarios
 
-| 测试   | 参数             | 说明     | 预期结果                 |
-|--------|------------------|----------|--------------------------|
-| Test 4 | CAP=20, LOOP=500 | ARC      | 命中率可能略高于 LRU，但仍较低 |
+#### 1. Hot Access
 
-#### 3. 访问频率变化场景 (Workload Shift Simulation)
-**目的：** 模拟工作负载从一组热点数据转移到另一组热点数据的情况，验证 ARC 的自适应性。
+**Goal:** Simulate most accesses focusing on a small set of keys and observe how ARC leverages its dual paths (T1/T2) to retain hot data.
 
-| 测试   | 参数               | 说明                     | 预期结果                               |
-|--------|--------------------|--------------------------|----------------------------------------|
-| Test 5 | Shift Workload     | 热点数据转移             | ARC 能够较快适应新热点，命中率短期波动后恢复 |
+| Test   | Parameters     | Description               | Expected Result                          |
+| ------ | -------------- | ------------------------- | ---------------------------------------- |
+| Test 1 | CAP=20, HOT=20 | Baseline                  | Higher hit rate than LRU and LFU         |
+| Test 2 | CAP=40         | Larger capacity           | Significant improvement, remains high    |
+| Test 3 | HOT=10         | More concentrated hot set | Further increase, stable at a high level |
 
-#### 4. 幽灵列表命中场景 (Ghost List Hits)
-**目的：** 专门测试当被驱逐的数据再次被访问时，ARC 如何利用 B1 或 B2 来调整策略，并将其重新带回缓存。
+#### 2. Loop Scan
 
-| 测试   | 场景               | 预期结果                               |
-|--------|--------------------|----------------------------------------|
-| Test 6 | B1 Hit             | 增加 `p`，item 从 B1 移到 T2，命中率提升 |
-| Test 7 | B2 Hit             | 减少 `p`，item 从 B2 移到 T2，命中率提升 |
+**Goal:** Simulate cyclic access patterns, typically unfavorable for LRU and LFU. Observe how ARC handles this pattern and leverages B1/B2 to avoid frequent evictions.
 
-## 测试结果 (示例，实际值可能因实现细节和随机性而异)
+| Test   | Parameters       | Description | Expected Result                                              |
+| ------ | ---------------- | ----------- | ------------------------------------------------------------ |
+| Test 4 | CAP=20, LOOP=500 | ARC         | Hit rate may be slightly higher than LRU, but still low overall |
 
-### 热点访问场景测试
+#### 3. Workload Shift Simulation
+
+**Goal:** Simulate a shift in the hot set from one group of keys to another and verify ARC’s adaptivity.
+
+| Test   | Parameters     | Description       | Expected Result                                              |
+| ------ | -------------- | ----------------- | ------------------------------------------------------------ |
+| Test 5 | Shift Workload | Hot set migration | ARC quickly adapts to the new hot set; hit rate dips briefly then recovers |
+
+#### 4. Ghost List Hits
+
+**Goal:** Specifically test how ARC uses B1 and B2 when evicted data is accessed again, adjusting policy and bringing items back into the cache.
+
+| Test   | Scenario | Expected Result                                           |
+| ------ | -------- | --------------------------------------------------------- |
+| Test 6 | B1 Hit   | Increase `p`; item moves from B1 to T2; hit rate improves |
+| Test 7 | B2 Hit   | Decrease `p`; item moves from B2 to T2; hit rate improves |
+
+## Test Results (Examples; actual values may vary due to implementation details and randomness)
+
+### Hot Access Tests
 
 ```
 === Test 1: Baseline (CAPACITY=20, HOT_KEYS=20) ===
-ARC - 命中率: 85.00% (25500 / 30000)
-// ARC 表现优于 LRU/LFU 基线，能够有效平衡。
+ARC - Hit Rate: 85.00% (25500 / 30000)
+// ARC outperforms the LRU/LFU baselines and balances effectively.
 
 === Test 2: Increase Capacity (CAPACITY=40) ===
-ARC - 命中率: 90.50% (27150 / 30000)
-// 容量增大带来显著提升，ARC 充分利用了更大空间。
+ARC - Hit Rate: 90.50% (27150 / 30000)
+// Increasing capacity yields a significant improvement; ARC makes good use of the larger space.
 
 === Test 3: Reduce Hot Keys (HOT_KEYS=10) ===
-ARC - 命中率: 93.20% (27960 / 30000)
-// 热点更集中，ARC 的自适应机制使其能更好地聚焦于核心热点。
+ARC - Hit Rate: 93.20% (27960 / 30000)
+// With a more concentrated hot set, ARC’s adaptivity lets it focus better on core hot items.
 ```
 
-**结论：** ARC 在热点访问场景下表现出色，其自适应能力使其能够有效利用缓存空间，并随着热点集中度和容量的增加而进一步提高命中率。
+**Conclusion:** In hot-access scenarios, ARC performs very well. Its adaptivity enables efficient use of cache space, and hit rates further increase as the hot-set concentration and capacity grow.
 
-### 循环扫描场景测试
+### Loop Scan Tests
 
 ```
 === Test 4: Loop Scan ARC ===
-ARC - 命中率: 25.00% (7500 / 30000)
-// 相比 LRU 的 0%，ARC 能通过识别第二次访问（进入 T2）来提高命中率，但总体仍偏低。
+ARC - Hit Rate: 25.00% (7500 / 30000)
+// Compared to LRU’s 0%, ARC improves by recognizing second accesses (moving into T2), though overall remains low.
 ```
 
-**结论：** ARC 在循环扫描场景下表现优于纯 LRU，但仍不能完全解决此类模式的挑战，因为大多数数据只被访问一次。
+**Conclusion:** ARC outperforms plain LRU in loop-scan scenarios but still cannot fully address this pattern, as most data is accessed only once.
 
-### 访问频率变化场景测试
+### Workload Shift Tests
 
 ```
 === Test 5: Workload Shift ARC ===
-ARC - 命中率: 78.00% (23400 / 30000)
-// ARC 能够快速检测到工作负载的变化，并动态调整 p 值，从而较快地适应新的热点数据，命中率波动后能较快恢复并保持较高水平。
+ARC - Hit Rate: 78.00% (23400 / 30000)
+// ARC can quickly detect workload changes and dynamically adjust p, adapting to the new hot set. After a brief dip, the hit rate quickly recovers and remains high.
 ```
 
-**结论：** ARC 的自适应性使其在工作负载变化时表现良好，能够较快地调整策略以适应新的访问模式。
+**Conclusion:** ARC’s adaptivity allows it to perform well under workload changes and quickly adjust strategies to the new access pattern.
 
-## 策略对比分析
+## Strategy Comparison
 
 ### ARC
-**优点：**
-- **自适应性强：** 能够根据工作负载动态调整缓存策略，优于静态的 LRU 和 LFU。
-- **平衡时间/频率局部性：** 同时考虑了数据的近期访问和访问频率，适用于多种复杂场景。
-- **利用幽灵列表：** 通过记录被驱逐项的访问信息，更智能地决定是否重新缓存或调整策略，有效避免“缓存污染”和“抖动”。
 
-**缺点：**
-- **实现复杂：** 相较于 LRU 或 LFU，ARC 需要维护更多的数据结构（四个列表，动态参数 `p`），实现起来更复杂。
-- **额外开销：** 维护多个列表和 `p` 参数带来额外的内存和 CPU 开销。
-- **理解与调试：** 由于其复杂的内部逻辑，理解和调试 ARC 的行为可能更具挑战性。
+**Pros:**
 
-## 编译方式
+- **Strong adaptivity:** Dynamically adjusts the policy based on workload, outperforming static LRU and LFU.
+- **Balances temporal/frequency locality:** Considers both recent access and access frequency, suitable for complex scenarios.
+- **Ghost lists:** By recording access info for evicted items, it intelligently decides whether to recache or adjust policy, effectively avoiding “cache pollution” and “thrashing”.
 
-使用 CMake 进行编译：
+**Cons:**
+
+- **Implementation complexity:** Compared to LRU or LFU, ARC maintains more data structures (four lists and dynamic parameter `p`), making it more complex to implement.
+- **Overhead:** Maintaining multiple lists and `p` introduces extra memory and CPU overhead.
+- **Understanding & debugging:** The internal logic is more complex, making it harder to understand and debug.
+
+## Build Instructions
+
+Build with CMake:
 
 ### ▶️ On Ubuntu (via WSL or native) or macOS:
 
-```bash
+```
 cmake -B build
 cmake --build build
 ./build/test_ArcCache
@@ -159,13 +170,13 @@ cmake --build build
 
 ### ▶️ On Windows (via WSL):
 
-```powershell
+```
 wsl bash -c "cd /home/alina/CacheSystem && cmake -B build && cmake --build build && ./build/test_ArcCache"
 ```
 
 ### ▶️ On macOS
 
-```bash
+```
 cmake -B build
 cmake --build build
 ./build/test_ArcCache
