@@ -245,8 +245,16 @@ GETs: 50000, Hits: 50000, Hit Rate: 100.00%
 
 使用 CMake 进行编译：
 
+### ▶️ On Ubuntu (via WSL or native) or macOS:
+
 ```bash
 cmake -B build
 cmake --build build
-./build/test_lru_only
+./build/test_LruOnly
+```
+
+### ▶️ On Windows (via WSL):
+
+```powershell
+wsl bash -c "cmake -B build && cmake --build build && ./build/test_LruOnly"
 ```
