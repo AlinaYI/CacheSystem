@@ -21,11 +21,9 @@ jobs:
       - name: Run unit tests
         run: |
           set -e
-          ./build/test_LruOnly
-          ./build/test_LfuCache
-          ./build/test_ArcCache
-          ./build/test_ArcNew
-
+          cd build
+          ctest --output-on-failure
+          cd ..
       # Optional: if you have a one-click script, it will generate logs/CSV
       - name: Run benchmark script (optional)
         run: |
