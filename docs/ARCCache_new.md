@@ -1,30 +1,30 @@
-# NewArc (ARC-inspired, Engineering-oriented) 缓存策略
+# NewArc (ARC-inspired, Engineering-oriented) Cache Policy
 
-## NewARC 是一种结合 LRU 和 LFU 的工程化缓存算法
+**NewARC is an engineering-oriented cache algorithm combining LRU and LFU**
 
-NewARC 是一种受 ARC 启发的缓存策略，它通过 LRU（最近最少使用） 和 LFU（最不经常使用） 的分区管理，结合幽灵缓存和阈值晋升机制，在不同访问模式下保持较高的命中率。与标准 ARC 相比，KArc 更符合工程应用场景，逻辑直观且能精确捕捉长期热点。
+NewARC is a cache policy inspired by ARC. By partitioning into LRU (Least Recently Used) and LFU (Least Frequently Used), and combining ghost caches with a threshold-based promotion mechanism, it maintains a high hit rate under diverse access patterns. Compared with standard ARC, KArc is more aligned with engineering application scenarios, with intuitive logic and precise capture of long-term hot items.
 
-### 适用场景
-- 同时存在短期热点和长期热点的数据访问场景。
-- 需要避免单纯 LRU 的“扫描污染”，同时克服 LFU 的“历史包袱”。
-- 工程系统中（数据库、分布式存储、KV 缓存）需要可解释、可调节的策略。
+### Applicable Scenarios
+- Data access patterns that contain both short-term and long-term hot items.
+- Need to avoid “scan pollution” of pure LRU while overcoming the “historical baggage” of LFU.
+- Engineering systems (databases, distributed storage, KV caches) that require explainable and tunable policies.
 
-### 设计思路
-NewARC 算法通过维护 LRU 部分、LFU 部分 和各自的 幽灵列表 来实现缓存管理：
+### Design Concept
+The NewARC algorithm manages the cache by maintaining an LRU part, an LFU part, and their respective ghost lists:
 
--   **LRU 部分**：存放*新近访问*的数据项。节点带有访问计数 accessCount。
--   **LRU Ghost**：记录最近从 LRU 中淘汰的键。
--   **LFU 部分**：存放*长期访问频繁*的数据，使用 map<频率, list<节点>> 精确管理。
--   **LFU Ghost**：记录最近从 LFU 中淘汰的键。
+- **LRU Part**: Stores *recently accessed* items. Each node carries an access count `accessCount`.
+- **LRU Ghost**: Records keys most recently evicted from LRU.
+- **LFU Part**: Stores *long-term frequently accessed* items, using `map<frequency, list<nodes>>` for precise management.
+- **LFU Ghost**: Records keys most recently evicted from LFU.
 
-**容量自适应机制:**
-如果某个键在 LRU Ghost 中命中 → 表示近期性更重要 → 给 LRU +1 容量，从 LFU -1。
-如果某个键在 LFU Ghost 中命中 → 表示频率性更重要 → 给 LFU +1 容量，从 LRU -1。
+**Capacity Adaptation Mechanism:**
+If a key hits in the LRU Ghost → recency matters more → give LRU +1 capacity and subtract 1 from LFU.  
+If a key hits in the LFU Ghost → frequency matters more → give LFU +1 capacity and subtract 1 from LRU.
 
-### 顶层接口： `CachePolicy.h`
-这个项目是想写所有的缓存策略的合集，那么这里就设计了一个顶层的接口
-用于实现所有的缓存算法的
-这个接口就包括定义了pure virtual function
+### Top-level Interface: `CachePolicy.h`
+This project aims to implement a collection of cache strategies, so we designed a top-level interface
+for implementing all cache algorithms.
+This interface defines pure virtual functions:
 
 ```cpp
 template<typename Key, typename Value>
@@ -36,83 +36,89 @@ public:
 };
 ```
 
-### NewARC 接口和实现
-
-**头文件设计：**
-- `ArcLruPart`：实现 LRU 部分，支持节点晋升、维护 LRU Ghost。
-- `ArcLfuPart`：实现 LFU 部分，支持频率桶、维护 LFU Ghost。
-- `NewArcCache`：顶层类，组合 LRU 与 LFU 两部分，并处理自适应容量调整。
-
-**实现文件特点：**
-- `put(const Key& key, const Value& value)`：优先写入 LRU；如果节点晋升则进入 LFU；命中幽灵时触发容量调整。
-- `get(const Key& key, Value& value)`：查找 LRU → 如果满足晋升条件则进入 LFU；否则查找 LFU。
-- `checkGhostCaches(Key)`: 判断命中的幽灵缓存，并触发 LRU/LFU 容量的增减。
-
-## 测试设计
-
-### 测试目标
-- 验证 NewArc 的基本功能：put、get、晋升逻辑、容量调整。
-- 测试 NewArc 在不同访问模式下的命中率表现。
-
-### 测试场景
-
-#### 1. 热点访问场景 (Hot Access)
-**目的：** 模拟大部分访问集中在少数 key 上，观察 NewArc 如何利用晋升机制将热点提升到 LFU。
-
-| 测试   | 参数            | 说明           | 预期结果             |
-|--------|-----------------|----------------|----------------------|
-| Test 1 | CAP=20, HOT=20  | 基线测试        | 命中率高于 LRU 和 LFU |
-| Test 2 | CAP=40          | 增大缓存容量    | 命中率显著提升，保持高位 |
-| Test 3 | HOT=10          | 热点更集中      | 命中率进一步上升，稳定在高点 |
-
-#### 2. 循环扫描场景 (Loop Scan)
-**目的：** 模拟数据循环访问场景，测试幽灵缓存能否避免频繁误驱逐
-
-| 测试   | 参数             | 说明     | 预期结果                 |
-|--------|------------------|----------|--------------------------|
-| Test 4 | CAP=20, LOOP=500 | 循环访问  | 命中率高于 LRU，但接近 ARC，整体仍低 |
-
-#### 3. 访问频率变化场景 (Workload Shift Simulation)
-**目的：** 模拟工作负载从一组热点数据转移到另一组热点数据的情况，验证 ARC 的自适应性。
-
-| 测试   | 参数               | 说明                     | 预期结果                               |
-|--------|--------------------|--------------------------|----------------------------------------|
-| Test 5 | Shift Workload     | 热点数据转移             | NewARC 能够较快适应新热点，命中率短期波动后恢复 |
-
-#### 4. 幽灵列表命中场景 (Ghost List Hits)
-**目的：** 专门测试 NewARC 的容量调整逻辑。
-
-| 测试   | 场景               | 预期结果                                |
-|--------|--------------------|----------------------------------------|
-| Test 6 | LRU Ghost          | LRU +1, LFU -1 → 提升短期命中率         |
-| Test 7 | LFU Ghost          | LFU +1, LRU -1 → 提升长期热点稳定性     |
-
-## 测试结果 (示例，实际值可能因实现细节和随机性而异)
-
-### 热点访问场景测试
 
 
-## 编译方式
+### NewARC Interface and Implementation
 
-使用 CMake 进行编译：
+**Header Design:**
+
+- `ArcLruPart`: Implements the LRU part, supports node promotion, and maintains the LRU Ghost.
+- `ArcLfuPart`: Implements the LFU part, supports frequency buckets, and maintains the LFU Ghost.
+- `NewArcCache`: Top-level class that composes the LRU and LFU parts and handles adaptive capacity adjustments.
+
+**Implementation Highlights:**
+
+- `put(const Key& key, const Value& value)`: Write to LRU first; if a node meets the promotion condition, promote it to LFU; if a ghost is hit, trigger capacity adjustment.
+- `get(const Key& key, Value& value)`: Lookup in LRU → if promotion condition is met, promote to LFU; otherwise look up in LFU.
+- `checkGhostCaches(Key)`: Detect hits in ghost caches and trigger LRU/LFU capacity increases/decreases.
+
+## Test Design
+
+### Test Objectives
+
+- Verify NewArc’s basic functions: put, get, promotion logic, and capacity adjustment.
+- Evaluate NewArc’s hit-rate performance under different access patterns.
+
+### Test Scenarios
+
+#### 1. Hot Access Scenario
+
+**Goal:** Simulate most accesses concentrating on a few keys and observe how NewArc uses promotion to move hot items into LFU.
+
+| Test   | Parameters     | Description               | Expected Result                        |
+| ------ | -------------- | ------------------------- | -------------------------------------- |
+| Test 1 | CAP=20, HOT=20 | Baseline                  | Higher hit rate than LRU & LFU         |
+| Test 2 | CAP=40         | Larger capacity           | Significant improvement, stays high    |
+| Test 3 | HOT=10         | More concentrated hot set | Further increase, stable at high level |
+
+#### 2. Loop Scan Scenario
+
+**Goal:** Simulate cyclic data access and test whether ghost caches can avoid frequent mistaken evictions.
+
+| Test   | Parameters       | Description | Expected Result                                           |
+| ------ | ---------------- | ----------- | --------------------------------------------------------- |
+| Test 4 | CAP=20, LOOP=500 | Loop access | Higher hit rate than LRU, close to ARC, overall still low |
+
+#### 3. Workload Shift Simulation
+
+**Goal:** Simulate a workload shift from one hot set to another and verify ARC’s adaptivity.
+
+| Test   | Parameters     | Description         | Expected Result                                              |
+| ------ | -------------- | ------------------- | ------------------------------------------------------------ |
+| Test 5 | Shift Workload | Hot set transitions | NewARC adapts quickly to new hot items; hit rate dips briefly then recovers |
+
+#### 4. Ghost List Hits
+
+**Goal:** Specifically test NewARC’s capacity adjustment logic.
+
+| Test   | Scenario  | Expected Result                                             |
+| ------ | --------- | ----------------------------------------------------------- |
+| Test 6 | LRU Ghost | LRU +1, LFU -1 → improves short-term hit rate               |
+| Test 7 | LFU Ghost | LFU +1, LRU -1 → improves stability for long-term hot items |
+
+
+
+## Build Instructions
+
+Build with CMake:
 
 ### ▶️ On Ubuntu (via WSL or native) or macOS:
 
-```bash
+```
 cmake -B build
 cmake --build build
 ./build/test_ArcCache
 ```
 
-### ▶️ On Windows (via WSL):
+▶️ On Windows (via WSL):
 
-```powershell
+```
 wsl bash -c "cd /home/alina/CacheSystem && cmake -B build && cmake --build build && ./build/test_ArcCache"
 ```
 
-### ▶️ On macOS
+▶️ On macOS
 
-```bash
+```
 cmake -B build
 cmake --build build
 ./build/test_ArcCache

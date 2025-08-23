@@ -1,40 +1,44 @@
 // ================== CachePolicy.h ==================
-// 抽象接口：定义所有缓存策略 (LRU / LFU / ARC …) 必须实现的基本行为
-// 1. put  —— 写入 / 更新数据
-// 2. get& —— 读取数据（通过引用返回命中值，bool 表示是否命中）
-// 3. get  —— 读取数据（直接返回值，未命中可抛异常或返回默认）
+// Abstract interface: defines the basic behavior that all cache policies
+// (LRU / LFU / ARC …) must implement
+// 1. put  —— write / update data
+// 2. get& —— read data (return hit value by reference; bool indicates hit/miss)
+// 3. get  —— read data (return value directly; on miss either throw or return default)
 //
-// 每个具体算法都应继承本类，并实现 3 个纯虚函数
+// Every concrete algorithm should inherit from this class and implement
+// these 3 pure virtual functions.
 // ===================================================
 
-#pragma once           // 现代写法：保证头文件只被编译一次（等价于传统宏守卫 Include Guard）
+#pragma once           // Modern form: ensure the header is compiled only once (equivalent to an include guard)
 
-namespace Cache {      // 将所有缓存类放进同一命名空间，避免与其他库冲突
+namespace Cache {      // Put all cache classes in the same namespace to avoid clashes with other libraries
 
-// 使用模板使缓存可支持任意 <Key, Value> 类型
+// Use templates so the cache supports arbitrary <Key, Value> types
 template <typename Key, typename Value>
 class CachePolicy
 {
 public:
-    // 析构函数必须声明为 virtual，以确保通过基类指针删除派生类时调用正确析构
+    // The destructor must be virtual to ensure the correct destructor is called
+    // when deleting a derived object via a base-class pointer.
     virtual ~CachePolicy() = default;
 
-    // ---------- 纯虚函数（pure virtual）----------
-    // 没有默认实现，强制所有子类必须自己实现，否则无法实例化
-    // ---------------------------------------------
+    // ---------- Pure virtual functions ----------
+    // No default implementation; all derived classes must provide one,
+    // otherwise they cannot be instantiated.
+    // --------------------------------------------
 
-    // 1️⃣ 写入 / 更新缓存
+    // 1️⃣ Write / update the cache
     virtual void put(const Key& key, const Value& value) = 0;
 
-    // 2️⃣ 读取缓存（安全版）
-    //    - 若命中：返回 true，并在 value 引用中写入数据
-    //    - 若未命中：返回 false
+    // 2️⃣ Read from the cache (safe version)
+    //    - On hit: return true and write the value to the output reference
+    //    - On miss: return false
     virtual bool get(const Key& key, Value& value) = 0;
 
-    // 3️⃣ 读取缓存（便捷版）
-    //    - 子类实现时通常内部调用上面的 get(Key, Value&)
-    //    - 未命中时可选择：
-    //        a) 抛出异常   b) 返回默认构造的 Value
+    // 3️⃣ Read from the cache (convenience version)
+    //    - Implementations typically call the above get(Key, Value&) internally
+    //    - On miss, you can choose to:
+    //        a) throw an exception   b) return a default-constructed Value
     virtual Value get(const Key& key) = 0;
 };
 

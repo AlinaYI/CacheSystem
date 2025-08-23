@@ -29,7 +29,7 @@ void runLfuTest(const std::string& testName, int capacity, int hotKeys, int cold
               << (100.0 * hitCount / getCount) << "%\n\n";
 }
 
-// LFU-Aging 测试函数，采用与基本测试相同的格式
+// LFU-Aging test function, using the same format as basic test
 void runLfuAgingTest(const std::string& testName, int capacity, int hotKeys, int coldKeys, int totalOps, int putRatio, int maxAverage) {
     std::cout << "=== " << testName << " ===\n";
     std::random_device rd;
@@ -54,14 +54,14 @@ void runLfuAgingTest(const std::string& testName, int capacity, int hotKeys, int
 }
 
 int main() {
-    // 原有的基本测试
+    // Original basic test
     runLfuTest("Lfu Test 1: Baseline (CAPACITY=20, HOT_KEYS=20)", 20, 20, 2000, 100000, 30);
     runLfuTest("Lfu Test 2: Increase Capacity (CAPACITY=40)", 40, 20, 2000, 100000, 30);
     runLfuTest("Lfu Test 3: Reduce Hot Keys (HOT_KEYS=10)", 20, 10, 2000, 100000, 30);
     runLfuTest("Lfu Test 4: High PUT rate (PUT=60%)", 20, 20, 2000, 100000, 60);
     runLfuTest("Lfu Test 5: Lower maxAvgFreq", 20, 20, 2000, 100000, 30, 500);
     
-    // LFU-Aging 测试
+    // LFU-Aging test 
     runLfuAgingTest("LFU-Aging Test 1: Low threshold (maxAvg=100)", 20, 20, 2000, 100000, 30, 100);
     runLfuAgingTest("LFU-Aging Test 2: Very low threshold (maxAvg=50)", 20, 20, 2000, 100000, 30, 50);
     runLfuAgingTest("LFU-Aging Test 3: Increase Capacity (CAPACITY=40)", 40, 20, 2000, 100000, 30, 100);
