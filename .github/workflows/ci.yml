@@ -7,37 +7,34 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Configure (Release)
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
       - name: Build
         run: cmake --build build -j
-
       - name: Run unit tests
         run: |
-          set -e
-          cd build
-          ctest --output-on-failure
-          cd ..
-      # Optional: if you have a one-click script, it will generate logs/CSV
-      - name: Run benchmark script (optional)
-        run: |
-          if [ -f ./run_all_tests.sh ]; then
-            chmod +x ./run_all_tests.sh
-            ./run_all_tests.sh || true
-          fi
+          ./build/test_LruOnly
+          ./build/test_LfuCache
+          ./build/test_ArcCache
+          ./build/test_ArcNew
 
-      - name: Upload logs & summary (optional)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-and-summary
-          path: |
-            build/logs/**/*.log
-            build/logs/summary.csv
-          if-no-files-found: ignore
+  sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (ASan+UBSan)
+        run: |
+          cmake -B build-sani -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS_DEBUG="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
+      - name: Build
+        run: cmake --build build-sani -j
+      - name: Run tests with sanitizers
+        env:
+          ASAN_OPTIONS: halt_on_error=1
+        run: |
+          ./build-sani/test_LruOnly
+          ./build-sani/test_LfuCache
+          ./build-sani/test_ArcCache
+          ./build-sani/test_ArcNew
