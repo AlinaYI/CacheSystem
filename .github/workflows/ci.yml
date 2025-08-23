@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (Release)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run unit tests
+        run: |
+          set -e
+          ./build/test_LruOnly
+          ./build/test_LfuCache
+          ./build/test_ArcCache
+          ./build/test_ArcNew
+
+      # Optional: if you have a one-click script, it will generate logs/CSV
+      - name: Run benchmark script (optional)
+        run: |
+          if [ -f ./run_all_tests.sh ]; then
+            chmod +x ./run_all_tests.sh
+            ./run_all_tests.sh || true
+          fi
+
+      - name: Upload logs & summary (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-and-summary
+          path: |
+            build/logs/**/*.log
+            build/logs/summary.csv
+          if-no-files-found: ignore
