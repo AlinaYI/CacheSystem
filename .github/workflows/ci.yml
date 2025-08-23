@@ -27,7 +27,7 @@ jobs:
       - name: Configure (ASan+UBSan)
         run: |
           cmake -B build-sani -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
+            -DCMAKE_CXX_FLAGS_DEBUG="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
       - name: Build
         run: cmake --build build-sani -j
       - name: Run tests with sanitizers
